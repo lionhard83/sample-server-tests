@@ -122,6 +122,32 @@ describe("endpoints", () => {
     });
   });
 
+  describe("login with not confirmed user", () => {
+    let newUser: User;
+    let password = "password";
+    before(async () => {
+      newUser = {
+        id: v4(),
+        name: "Carlo",
+        surname: "Leonardi",
+        email: "carloleonardi83@gmail.com",
+        password: await bcrypt.hash(password, saltRounds),
+        verify: v4(),
+      };
+      users.push(newUser);
+    });
+    after(() => {
+      const index = users.findIndex(({ email }) => email === user.email);
+      users.splice(index, 1);
+    });
+    it("test 401 login not success (while email is not verified)", async () => {
+      const { status } = await request(app)
+        .post(`/login`)
+        .send({ email: newUser.email, password });
+      status.should.be.equal(401);
+    });
+  });
+
   describe("me", () => {
     let newUser: User;
     let password = "password";

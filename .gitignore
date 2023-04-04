@@ -1,3 +1,4 @@
 build
 node_modules
 src/app2.ts
+db.json

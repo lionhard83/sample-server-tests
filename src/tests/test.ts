@@ -167,7 +167,7 @@ describe("endpoints", () => {
     });
     it("test 200 token wrong", async () => {
       const { status } = await request(app)
-        .post(`/login`)
+        .get(`/me`)
         .set({ authorization: "wrong-token" });
       status.should.be.equal(400);
     });

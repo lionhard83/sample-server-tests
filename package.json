@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "start": "npm run build && node ./build/app.js",
-    "test": "npm run build && mocha ./build/tests/*.js"
+    "start": "export DB=db.json && npm run build && node ./build/app.js",
+    "test": "export DB=dbtest.json && npm run build && mocha ./build/tests/*.js" 
   },
   "keywords": [],
   "author": "",

@@ -7,8 +7,6 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 const jwtToken = "shhhhhhh";
 export const saltRounds = 10;
-import mongoose from "mongoose";
-import { User } from "./models/User";
 
 app.use(express.json());
 
@@ -39,33 +37,38 @@ app.post(
   body("surname").notEmpty(),
   body("password").isLength({ min: 8 }).notEmpty(),
   checkErrors,
-  async (req, res) => {
-    try {
-      const { name, surname, email, password } = req.body;
-      const user = new User({
-        name,
-        surname,
-        email,
-        password: await bcrypt.hash(password, saltRounds),
-        verify: v4(),
-      });
-      const response = await user.save();
-      res.status(201).json({
-        name: user.name,
-        id: response._id,
-        surname: user.surname,
-        email: user.email,
-      });
-    } catch (err) {
+  (req, res, next) => {
+    const user = users.find(({ email }) => email === req.body.email);
+    if (user) {
       return res.status(409).json({ message: "Email is just present" });
     }
+    next();
+  },
+  async (req, res) => {
+    const { name, surname, email, password } = req.body;
+    const user = {
+      name,
+      surname,
+      email,
+      password: await bcrypt.hash(password, saltRounds),
+      id: v4(),
+      verify: v4(),
+    };
+    users.push(user);
+    await fs.writeFile(String(process.env.DB), JSON.stringify(users));
+    res.status(201).json({
+      name: user.name,
+      id: user.id,
+      surname: user.surname,
+      email: user.email,
+    });
   }
 );
 app.get("/validate/:tokenVerify", async (req, res) => {
-  const user = await User.findOne({ verify: req.params.tokenVerify });
+  const user = users.find((item) => item.verify === req.params.tokenVerify);
   if (user) {
-    user.verify = undefined;
-    await user.save();
+    delete user.verify;
+    await fs.writeFile(String(process.env.DB), JSON.stringify(users));
     res.json({ message: "User enabled" });
   } else {
     res.status(400).json({ message: "token not valid" });
@@ -77,53 +80,33 @@ app.post(
   body("password").isLength({ min: 8 }).notEmpty(),
   checkErrors,
   async (req, res) => {
-    const user = await User.findOne({ email: req.body.email });
+    const user = users.find((item) => item.email === req.body.email);
     if (
       user &&
       !user.verify &&
       (await bcrypt.compare(req.body.password, user.password!))
     ) {
-      const token = jwt.sign(
-        {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          surname: user.surname,
-        },
-        jwtToken
-      );
-      return res.json({ token });
+      res.json({ token: jwt.sign(user, jwtToken) });
     } else {
       res.status(401).json({ message: "Invalid credentials" });
     }
   }
 );
-app.get(
-  "/me",
-  header("authorization").isJWT(),
-  checkErrors,
-  async (req, res) => {
-    const auth = req.headers.authorization as string;
-    const user = jwt.verify(auth, jwtToken) as User;
-    const userFinded = await User.findById(user.id);
-    if (userFinded) {
-      res.json({
-        id: userFinded._id,
-        name: userFinded.name,
-        surname: userFinded.surname,
-        email: userFinded.email,
-      });
-    } else {
-      res.status(400).json({ message: "token not valid" });
-    }
+app.get("/me", header("authorization").isJWT(), checkErrors, (req, res) => {
+  const auth = req.headers.authorization as string;
+  const user = jwt.verify(auth, jwtToken) as User;
+  if (users.find((item) => item.email === user.email)) {
+    delete user.password;
+    res.json(user);
+  } else {
+    res.status(400).json({ message: "token not valid" });
   }
-);
+});
 
-app.listen(process.env.PORT || 3001, async () => {
+app.listen(3001, async () => {
   await fs.writeFile(String(process.env.DB), JSON.stringify([]));
   users = JSON.parse(await fs.readFile(String(process.env.DB), "binary"));
   console.log("Server is running");
-  await mongoose.connect(`mongodb://127.0.0.1:27017/${process.env.DB}`);
 });
 
 export default app;

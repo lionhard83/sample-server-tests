@@ -3,6 +3,8 @@ require("chai").should();
 import bcrypt from "bcrypt";
 import { app, users, User, saltRounds } from "../app";
 import { v4 } from "uuid";
+import { User as UserSchema } from "../models/User";
+import { assert } from "chai";
 
 describe("endpoints", () => {
   const user = {
@@ -12,9 +14,8 @@ describe("endpoints", () => {
     password: "testtest",
   };
   describe("signup", () => {
-    after(() => {
-      const index = users.findIndex(({ email }) => email === user.email);
-      users.splice(index, 1);
+    after(async () => {
+      await UserSchema.findOneAndDelete({ email: user.email });
     });
     it("test 400 wrong email", async () => {
       const { status } = await request(app)
@@ -55,52 +56,47 @@ describe("endpoints", () => {
     });
   });
 
-  describe("validate", () => {
-    let newUser: User;
-    before(() => {
-      newUser = {
-        id: v4(),
-        name: "Carlo",
-        surname: "Leonardi",
-        email: "carloleonardi83@gmail.com",
-        password: "cript-password",
-        verify: v4(),
-      };
-      users.push(newUser);
+  describe("validate", async () => {
+    const verify = v4();
+    before(async () => {
+      const userCreated = new UserSchema({
+        name: user.name,
+        surname: user.surname,
+        email: user.email,
+        password: user.password,
+        verify,
+      });
+      await userCreated.save();
     });
-    after(() => {
-      const index = users.findIndex(({ email }) => email === user.email);
-      users.splice(index, 1);
+    after(async () => {
+      await UserSchema.findOneAndDelete({ email: user.email });
     });
     it("test 400 Invalid token", async () => {
       const { status } = await request(app).get(`/validate/fake-token`);
       status.should.be.equal(400);
     });
     it("test 200 set token", async () => {
-      const { status } = await request(app).get(`/validate/${newUser.verify}`);
+      const { status } = await request(app).get(`/validate/${verify}`);
       status.should.be.equal(200);
-      const userFinded = users.find(({ email }) => email === newUser.email);
-      userFinded!.should.not.have.property("verify");
+      const userFinded = await UserSchema.findOne({ email: user.email });
+      assert.equal(userFinded!.verify, undefined);
     });
   });
 
   describe("login", () => {
-    let newUser: User;
-    let password = "password";
     before(async () => {
-      newUser = {
-        id: v4(),
-        name: "Carlo",
-        surname: "Leonardi",
-        email: "carloleonardi83@gmail.com",
-        password: await bcrypt.hash(password, saltRounds),
-      };
-      users.push(newUser);
+      const userCreated = new UserSchema({
+        name: user.name,
+        surname: user.surname,
+        email: user.email,
+        password: await bcrypt.hash(user.password, saltRounds),
+      });
+      await userCreated.save();
     });
-    after(() => {
-      const index = users.findIndex(({ email }) => email === user.email);
-      users.splice(index, 1);
+    after(async () => {
+      await UserSchema.findOneAndDelete({ email: user.email });
     });
+
     it("test 400 wrong data", async () => {
       const { status } = await request(app)
         .post(`/login`)
@@ -110,60 +106,52 @@ describe("endpoints", () => {
     it("test 401 invalid credentials", async () => {
       const { status } = await request(app)
         .post(`/login`)
-        .send({ email: newUser.email, password: "wrong-password" });
+        .send({ email: user.email, password: "wrong-password" });
       status.should.be.equal(401);
     });
     it("test 200 login success", async () => {
       const { status, body } = await request(app)
         .post(`/login`)
-        .send({ email: newUser.email, password });
+        .send({ email: user.email, password: user.password });
       status.should.be.equal(200);
       body.should.have.property("token");
     });
   });
 
   describe("login with not confirmed user", () => {
-    let newUser: User;
-    let password = "password";
     before(async () => {
-      newUser = {
-        id: v4(),
-        name: "Carlo",
-        surname: "Leonardi",
-        email: "carloleonardi83@gmail.com",
-        password: await bcrypt.hash(password, saltRounds),
+      const userCreated = new UserSchema({
+        name: user.name,
+        surname: user.surname,
+        email: user.email,
+        password: await bcrypt.hash(user.password, saltRounds),
         verify: v4(),
-      };
-      users.push(newUser);
+      });
+      await userCreated.save();
     });
-    after(() => {
-      const index = users.findIndex(({ email }) => email === user.email);
-      users.splice(index, 1);
+    after(async () => {
+      await UserSchema.findOneAndDelete({ email: user.email });
     });
     it("test 401 login not success (while email is not verified)", async () => {
       const { status } = await request(app)
         .post(`/login`)
-        .send({ email: newUser.email, password });
+        .send({ email: user.email, password: user.password });
       status.should.be.equal(401);
     });
   });
 
   describe("me", () => {
-    let newUser: User;
-    let password = "password";
     before(async () => {
-      newUser = {
-        id: v4(),
-        name: "Carlo",
-        surname: "Leonardi",
-        email: "carloleonardi83@gmail.com",
-        password: await bcrypt.hash(password, saltRounds),
-      };
-      users.push(newUser);
+      const userCreated = new UserSchema({
+        name: user.name,
+        surname: user.surname,
+        email: user.email,
+        password: await bcrypt.hash(user.password, saltRounds),
+      });
+      await userCreated.save();
     });
-    after(() => {
-      const index = users.findIndex(({ email }) => email === user.email);
-      users.splice(index, 1);
+    after(async () => {
+      await UserSchema.findOneAndDelete({ email: user.email });
     });
     it("test 200 token wrong", async () => {
       const { status } = await request(app)
@@ -176,17 +164,17 @@ describe("endpoints", () => {
         body: { token },
       } = await request(app)
         .post(`/login`)
-        .send({ email: newUser.email, password });
+        .send({ email: user.email, password: user.password });
 
       const { body } = await request(app)
         .get("/me")
         .set({ authorization: token });
       body.should.have.property("id");
-      body.should.have.property("name").equal(newUser.name);
-      body.should.have.property("surname").equal(newUser.surname);
-      body.should.have.property("email").equal(newUser.email);
-      body.should.not.have.property("password");
-      body.should.not.have.property("verify");
+      body.should.have.property("name").equal(user.name);
+      body.should.have.property("surname").equal(user.surname);
+      body.should.have.property("email").equal(user.email);
+      assert.equal(body!.verify, undefined);
+      assert.equal(body!.password, undefined);
     });
   });
 });

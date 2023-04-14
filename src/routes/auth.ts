@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { body, header } from "express-validator";
 import { User } from "../models/User";
 import bcrypt from "bcrypt";
@@ -9,13 +9,19 @@ const router = express.Router();
 import { v4 } from "uuid";
 import { checkErrors } from "./utils";
 
-export type User = {
-  id: string;
-  name: string;
-  surname: string;
-  email: string;
-  password?: string;
-  verify?: string;
+export const isAuth = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const auth = req.headers.authorization as string;
+  const user = jwt.verify(auth, jwtToken) as { id: string };
+  res.locals.userFinded = await User.findById(user.id);
+  if (res.locals.userFinded) {
+    return next();
+  } else {
+    return res.status(400).json({ message: "token not valid" });
+  }
 };
 
 router.post(
@@ -88,20 +94,15 @@ router.get(
   "/me",
   header("authorization").isJWT(),
   checkErrors,
-  async (req, res) => {
-    const auth = req.headers.authorization as string;
-    const user = jwt.verify(auth, jwtToken) as User;
-    const userFinded = await User.findById(user.id);
-    if (userFinded) {
-      res.json({
-        id: userFinded._id,
-        name: userFinded.name,
-        surname: userFinded.surname,
-        email: userFinded.email,
-      });
-    } else {
-      res.status(400).json({ message: "token not valid" });
-    }
+  isAuth,
+  async (_, res) => {
+    const userFinded = res.locals.userFinded;
+    res.json({
+      id: userFinded._id,
+      name: userFinded.name,
+      surname: userFinded.surname,
+      email: userFinded.email,
+    });
   }
 );
 

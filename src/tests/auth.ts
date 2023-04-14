@@ -9,7 +9,7 @@ import { saltRounds } from "../routes/auth";
 
 const baseAuth = "/v1/auth";
 
-describe("endpoints", () => {
+describe("auth", () => {
   const user = {
     name: "Carlo",
     surname: "Leonardi",
